@@ -55,6 +55,7 @@ module.exports = {
       "argsIgnorePattern": "^_",
       "varsIgnorePattern": "^_"
     }],
+    "@typescript-eslint/no-empty-object-type": "off",
     "@typescript-eslint/ban-ts-comment": "off",
     "@typescript-eslint/camelcase": "off",
     "@typescript-eslint/explicit-function-return-type": "off",
