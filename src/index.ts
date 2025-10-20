@@ -8,6 +8,13 @@ import * as Option from "effect/Option"
 import type { Predicate, Refinement } from "effect/Predicate"
 import * as Record from "effect/Record"
 import * as Struct from "effect/Struct"
+import { immerable, produce as immerProduce } from "immer"
+
+/**
+ * Utility type that filters out symbol keys from a type
+ * @internal
+ */
+type PublicKeys<T> = { readonly [K in keyof T as K extends symbol ? never : K]: T[K] }
 
 /**
  * @since 1.0.0
@@ -86,11 +93,11 @@ export interface Optic<
   pick<S, A, Keys extends readonly [keyof A, ...Array<keyof A>]>(
     this: Lens<S, A>,
     ...keys: Keys
-  ): Lens<S, { readonly [K in Keys[number]]: A[K] }>
+  ): Lens<S, PublicKeys<{ readonly [K in Keys[number]]: A[K] }>>
   pick<S, A, Keys extends readonly [keyof A, ...Array<keyof A>]>(
     this: Optional<S, A>,
     ...keys: Keys
-  ): Optional<S, { readonly [K in Keys[number]]: A[K] }>
+  ): Optional<S, PublicKeys<{ readonly [K in Keys[number]]: A[K] }>>
 
   /**
    * An optic that excludes a group of keys of a struct.
@@ -100,11 +107,11 @@ export interface Optic<
   omit<S, A, Keys extends readonly [keyof A, ...Array<keyof A>]>(
     this: Lens<S, A>,
     ...keys: Keys
-  ): Lens<S, { readonly [K in Exclude<keyof A, Keys[number]>]: A[K] }>
+  ): Lens<S, PublicKeys<{ readonly [K in Exclude<keyof A, Keys[number]>]: A[K] }>>
   omit<S, A, Keys extends readonly [keyof A, ...Array<keyof A>]>(
     this: Optional<S, A>,
     ...keys: Keys
-  ): Optional<S, { readonly [K in Exclude<keyof A, Keys[number]>]: A[K] }>
+  ): Optional<S, PublicKeys<{ readonly [K in Exclude<keyof A, Keys[number]>]: A[K] }>>
 
   /**
    * An optic that accesses the case specified by a predicate.
@@ -292,6 +299,20 @@ const lensComposition = <
           )
     )
 
+/**
+ * Check if an object is marked as immerable for Immer
+ */
+const isImmerable = (obj: any): boolean => {
+  if (obj == null || typeof obj !== "object") return false
+  // Check instance
+  if (obj[immerable] === true) return true
+  // Check constructor
+  if (obj.constructor?.[immerable] === true) return true
+  // Check prototype
+  if (obj.constructor?.prototype?.[immerable] === true) return true
+  return false
+}
+
 const at = <S, Key extends keyof S & (string | symbol)>(key: Key): Lens<S, S[Key]> =>
   lens((s) => s[key], (b) =>
     (s) => {
@@ -299,6 +320,12 @@ const at = <S, Key extends keyof S & (string | symbol)>(key: Key): Lens<S, S[Key
         const out: any = s.slice()
         out[key] = b
         return out
+      }
+      // Use Immer's produce for immerable objects
+      if (isImmerable(s)) {
+        return immerProduce(s, (draft: any) => {
+          draft[key] = b
+        })
       }
       return { ...s, [key]: b }
     })
@@ -773,3 +800,9 @@ export const modify = <S, T, A, B>(optic: PolyOptional<S, T, A, B>) =>
         Either.flatMap((a) => optic.setOptic(f(a))(s)),
         Either.getOrElse(([_, t]) => t)
       )
+
+/**
+ * Re-export immerable symbol from Immer for marking classes as immutable
+ * @since 1.0.0
+ */
+export { immerable }
